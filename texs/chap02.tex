@@ -1,0 +1,59 @@
+\otherchapter{面向机器人连续控制的强化学习理论推导}
+\raggedbottom
+\section{马尔可夫决策过程及连续控制空间映射}
+在强化学习领域，处理像双足机器人运动控制这样的连续决策问题时，一个常见的做法是将其建模成一个时间上离散的马尔可夫决策过程。在我们的研究框架里，这个控制问题可以用一个核心的数学结构来严格描述，即元组 $\mathcal{M}=\langle\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\gamma, \rho_{0}\rangle$。这个元组里的每一个符号，都对应着框架里的一个基本概念：$\mathcal{S}$代表环境所有可能的状态，$\mathcal{A}$代表智能体可以采取的动作，$\mathcal{P}$描述了系统状态如何根据当前状态和动作发生转移，$\mathcal{R}$是一个给出奖励（或惩罚）的函数，$\gamma$是一个介于0和1之间的折扣因子，而 $\rho_{0}$ 则定义了任务开始时状态的分布情况。
+
+把这个抽象的框架映射到我们的双足机器人上，就能得到更具体的理解。首先，状态空间 $\mathcal{S}$ 可以看作是机器人能从自身传感器（比如编码器、陀螺仪）实时获取的所有信息的集合，通常包括了各个关节的角度和角速度，以及机器人躯干相对于重力方向的姿态。这些信息共同定义了机器人在某一时刻的``处境''。其次，动作空间 $\mathcal{A}$ 则是策略网络每一次决策的输出，在机器人控制里，这通常就是发送给各个关节马达的位置指令或力矩指令。为了处理的方便，策略网络通常输出一个在 $[-1, 1]$ 范围内的标准化值，然后再按比例放大到每个关节实际允许的物理运动范围。
+
+那么，系统是如何``动''起来的呢？这由状态转移概率 $\mathcal{P}$ 来描述，它定义了在当前状态 $s_{t}$ 下采取动作 $a_{t}$ 后，下一时刻状态 $s_{t+1}$ 的可能性。在实际的仿真环境中，这个复杂的动力学过程并不是由一个概率表给出的，而是由一个高性能的物理引擎（比如我们用的Isaac Gym内置的PhysX）来计算的。引擎根据当前的动力学方程，积分求解出执行动作后的结果，所以我们可以近似地认为 $s_{t+1} = f(s_t, a_t, \Delta t)$，这里 $\Delta t$ 是仿真的时间步长。
+
+指导机器人学习的信号是奖励函数 $\mathcal{R}$。每当机器人在某个状态下做了一个动作，环境就会给它一个标量的奖励反馈，就像考试的打分一样。对于走路这样的复杂任务，我们通常会设计好几个评价标准（比如走得多快、躯干多稳、能耗多省），然后把它们的评分按权重加起来，形成一个总的奖励信号。折扣因子 $\gamma$ 的作用，是让机器人学会权衡``眼前利益''和``长远回报''：$\gamma$ 值设得越小，机器人就越``短视''，只关注立刻能得到的奖励；$\gamma$ 越接近1，它就愈有``远见''，会为了未来更高的总回报而采取行动。最后，初始状态分布 $\rho_{0}(s_{0})$ 就是每次训练开始时，让机器人摆出的各种初始姿态的约定，在我们的实验里，通常就是让它从站立的姿态开始学习。
+
+有了这个模型，强化学习的目标就变得很明确了：我们要寻找一个由参数 $\theta$ 定义的策略 $\pi_{\theta}(a|s)$，这个策略能够根据当前状态 $s$ 来输出动作 $a$。训练的目的，就是调整这些参数 $\theta$，使得我们的机器人遵循这个策略所能获得的累计折扣回报的期望值达到最大。这个目标可以用公式 \eqref{eq:objective} 来表示：
+\begin{equation}
+J(\pi_{\theta})=\mathbb{E}_{\tau\sim\pi_{\theta}}\left[\sum_{t=0}^{T}\gamma^{t}\mathcal{R}(s_{t},a_{t})\right]
+\label{eq:objective}
+\end{equation}
+
+其中 $\tau = (s_0, a_0, s_1, a_1, \ldots, s_T)$ 表示一条轨迹，$T$ 为该轨迹的长度（通常对应一个"回合"episode）。在实践中，由于环境动力学的随机性和策略的随机性，上式期望值通过与环境交互得到的大量轨迹样本进行蒙特卡洛估计。
+
+为了更好地理解策略学习的过程，我们引入状态价值函数和动作价值函数的概念。状态价值函数 $V^\pi(s)$ 表示从状态 $s$ 出发、在策略 $\pi$ 下的期望累计折现回报：
+\begin{equation}
+V^\pi(s) = \mathbb{E}_{a \sim \pi, s' \sim P}\left[r + \gamma V^\pi(s')\right]
+\label{eq:value_function}
+\end{equation}
+而动作价值函数（Q函数）$Q^\pi(s,a)$ 则定义为在状态 $s$ 执行动作 $a$ 后的期望累计回报：
+\begin{equation}
+Q^\pi(s,a) = \mathbb{E}_{s' \sim P}\left[r(s,a) + \gamma V^\pi(s')\right]
+\label{eq:action_value}
+\end{equation}
+优势函数 $A^\pi(s,a)$ 衡量某个特定动作相对于该状态下平均水平的优劣程度，定义为：
+\begin{equation}
+A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)
+\end{equation}
+优势函数的符号和大小能够指导策略的更新方向：正的优势意味着该动作优于平均水平，应当被强化；负的优势则表示该动作劣于平均，应当被抑制。
+
+
+\subsection{近端策略优化(PPO)与广义优势度微调范式}
+由于双足机器人需要同时控制多个关节，本文选用基于 Actor-Critic 框架的近端策略优化（PPO）算法\cite{Schulman2017PPO}。PPO 属于策略梯度(Policy Gradient)方法的一员，其核心思想是通过梯度上升来最大化目标函数（方程 \ref{eq:objective}），但与传统的策略梯度方法不同，PPO 通过一个巧妙的"截断"机制来限制策略更新步长，从而提高训练的稳定性和样本效率。
+
+策略梯度的基本形式为 $\nabla J(\theta) = \mathbb{E}[A(s,a) \nabla \log \pi_\theta(a|s)]$，但直接应用这个形式往往导致样本利用效率低（需要大量新样本）且更新不稳定。PPO 通过重要性采样(Importance Sampling)的思想，利用旧策略 $\pi_{\theta_{old}}$ 采集得到的数据，对新策略 $\pi_\theta$ 的优化进行多次更新。定义概率比函数 $r_{t}(\theta)=\frac{\pi_{\theta}(a_{t}|s_{t})}{\pi_{\theta_{old}}(a_{t}|s_{t})}$，PPO 的损失函数为：
+\begin{equation}
+L^{CLIP}(\theta)=\hat{\mathbb{E}}_{t}\left[\min\left(r_{t}(\theta)\hat{A}_{t}, \text{clip}(r_{t}(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_{t}\right)\right]
+\label{eq:ppo_loss}
+\end{equation}
+其中截断参数 $\epsilon$ 通常设置为 0.2。这个设计的妙处在于，当 $r_t(\theta)$ 在 $1 - \epsilon$ 到 $1 + \epsilon$ 范围之外时，梯度被截断为零，这直接控制了新旧策略之间的 KL 散度，防止了过度的策略更新。这种"信任域"的隐式约束使得 PPO 在 policy-on-policy（与环境实时交互）的学习中比许多其他方法更稳健。
+
+Actor-Critic 框架中的 Critic 网络 $V_{\phi}(s_{t})$ 用于预测当前状态的价值，其参数 $\phi$ 通过最小化价值损失进行优化：
+\begin{equation}
+L^{VF}(\phi) = \mathbb{E}[(V_\phi(s_t) - Q_t)^2]
+\label{eq:value_loss}
+\end{equation}
+其中 $Q_t = \sum_{l=0}^{\infty}(\gamma\lambda)^{l}\delta_{t+l}$ 是通过广义优势估计(Generalized Advantage Estimation, GAE)\cite{Schulman2015GAE}得到的目标值：
+\begin{equation}
+\hat{A}_{t}=\sum_{l=0}^{\infty}(\gamma\lambda)^{l}\delta_{t+l}, \quad \delta_{t}=r_{t}+\gamma V_{\phi}(s_{t+1})-V_{\phi}(s_{t})
+\label{eq:gae}
+\end{equation}
+这里 $r_t$ 是当前步的奖励，$\lambda \in [0, 1]$ 是一个衰减因子，$\delta_t$ 称为广义优势的"一步估计"。GAE 方法通过引入参数 $\lambda$ 在"低方差高偏差"（纯 Monte Carlo 采样）和"高方差低偏差"（TD 方法）之间取得平衡，从而提升了价值估计的精度。
+
+在实际实现中，PPO 采用"分批优化"的策略：从与环境的交互中采集一个批次的轨迹数据，计算对应的优势值和奖励，然后对该批数据进行多个 epoch 的梯度更新，每个 epoch 内部又可以划分为多个 mini-batch 进行小批量随机梯度下降(SGD)。这种做法进一步提高了样本利用效率，通常用较少的样本次数可以达到很好的学习效果。对于足式机器人的控制任务，PPO 相比其他策略梯度方法（如 TRPO）的优势包括实现简洁、超参数更少、对初始化和学习率变化不敏感，以及在多任务和约束学习中的灵活性。

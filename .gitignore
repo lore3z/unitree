@@ -1,0 +1,24 @@
+# Training outputs / logs (huge: model checkpoints + tensorboard events)
+logs/
+runs/
+wandb/
+
+# Thesis (large PDFs / zips / fonts, not part of the code)
+thesis/
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Log files
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

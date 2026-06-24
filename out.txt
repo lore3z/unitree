@@ -1,0 +1,50 @@
+/usr/bin/bash: /home/lzt/miniconda3/envs/rl-g1/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+/home/lzt/miniconda3/envs/rl-g1/lib/python3.8/site-packages/torch/functional.py:445: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at  ../aten/src/ATen/native/TensorShape.cpp:2157.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+
+Importing module 'gym_38' (/home/lzt/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/lzt/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.10.0+cu113
+Device count 1
+/home/lzt/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/lzt/.cache/torch_extensions/py38_cu113 as PyTorch extensions root...
+Emitting ninja build file /home/lzt/.cache/torch_extensions/py38_cu113/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+Loading extension module gymtorch...
+Setting seed: 1
+'train_cfg' provided -> Ignoring 'name=g1_arms'
+Actor MLP: Sequential(
+  (0): Linear(in_features=64, out_features=32, bias=True)
+  (1): ELU(alpha=1.0)
+  (2): Linear(in_features=32, out_features=12, bias=True)
+)
+Critic MLP: Sequential(
+  (0): Linear(in_features=64, out_features=32, bias=True)
+  (1): ELU(alpha=1.0)
+  (2): Linear(in_features=32, out_features=1, bias=True)
+)
+Actor RNN: Memory(
+  (rnn): LSTM(81, 64)
+)
+Critic RNN: Memory(
+  (rnn): LSTM(84, 64)
+)
+Loading model from: /home/lzt/unitree_copy/unitree_rl_gym/logs/g1_arms/Mar18_00-14-17_/model_10000.pt
+step: 0 z: 0.799312949180603
+step: 10 z: 0.7531901597976685
+step: 20 z: 0.7464163899421692
+step: 30 z: 0.7443917393684387
+step: 40 z: 0.7438892126083374
+step: 50 z: 0.7205696702003479
+step: 60 z: 0.7078915238380432
+step: 70 z: 0.6916242241859436
+step: 80 z: 0.7081574201583862
+step: 90 z: 0.7020142078399658
+

@@ -1,0 +1,25 @@
+/usr/bin/bash: /home/lzt/miniconda3/envs/rl-g1/lib/libtinfo.so.6: no version information available (required by /usr/bin/bash)
+Traceback (most recent call last):
+  File "print_isaac_dofs.py", line 3, in <module>
+    from legged_gym.utils import get_args
+  File "/home/lzt/unitree_copy/unitree_rl_gym/legged_gym/utils/__init__.py", line 2, in <module>
+    from .task_registry import task_registry
+  File "/home/lzt/unitree_copy/unitree_rl_gym/legged_gym/utils/task_registry.py", line 13, in <module>
+    from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
+  File "/home/lzt/unitree_copy/unitree_rl_gym/legged_gym/envs/__init__.py", line 13, in <module>
+    from legged_gym.utils.task_registry import task_registry
+ImportError: cannot import name 'task_registry' from partially initialized module 'legged_gym.utils.task_registry' (most likely due to a circular import) (/home/lzt/unitree_copy/unitree_rl_gym/legged_gym/utils/task_registry.py)
+
+ERROR conda.cli.main_run:execute(127): `conda run python print_isaac_dofs.py` failed. (See above for error)
+Importing module 'gym_38' (/home/lzt/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/lzt/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.10.0+cu113
+Device count 1
+/home/lzt/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/lzt/.cache/torch_extensions/py38_cu113 as PyTorch extensions root...
+Emitting ninja build file /home/lzt/.cache/torch_extensions/py38_cu113/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+

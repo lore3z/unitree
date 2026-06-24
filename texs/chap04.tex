@@ -1,0 +1,169 @@
+\otherchapter{并行仿真环境下的对照实验}
+基于高速数据吞吐的并行仿真底座，本研究利用 NVIDIA Isaac Gym 物理仿真引擎部署了 1024 个并行环境的训练架构。这个规模的选择不是随意的——通过 1024 倍的并行化，即使单个环境的仿真速度有限，整体的数据吞吐量也足以支撑短时间内采集数亿步的经验。在约 2.45 亿步的训练数据基础上，本文对纯下肢控制的基线（12-DoF）与全身协同系统（29-DoF）进行了定量对比。
+
+\section{训练收敛性分析}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/paper_reward_comparison.png}
+    \caption{纯腿部(12-DoF)与全身模型(29-DoF)训练总奖励收敛对比}
+    \label{fig:reward_comparison}
+\end{figure}
+
+对比纯下肢的 12-DoF 基线，29-DoF 模型在训练早期表现不稳定，经常摔倒。这是因为添加了上半身后，机器人的质量分布改变，在起步和转向时会产生额外的惯性，容易破坏平衡。到训练中后期，策略逐渐学会了处理这些耦合效应。最终的收敛结果显示，12-DoF 的平均总奖励最高为 21.27 分（第 9673 次迭代），最终稳定在 19.92；29-DoF 最高为 15.60 分（第 9916 次迭代），最终稳定在 12.83。29-DoF 的分数虽然较低，但这不是坏事——额外的上半身给系统加入了物理约束，迫使网络找到更加实际可行的动作。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/paper_loss_convergence.png}
+    \caption{价值网络(Critic)均方预测误差(Value Loss)演化对比图}
+    \label{fig:value_loss}
+\end{figure}
+
+从价值网络（Critic）的预测误差曲线看，12-DoF 模型较为平缓，最高值为 0.027（第 9830 次迭代）。29-DoF 模型的误差增长更陡，最高达 0.056（第 9598 次迭代），约为 12-DoF 的两倍。这反映了一个实际问题：加入上半身后，系统状态更复杂，未来回报的预测也更难，所以 Critic 网络承受了更大的预测不确定性。
+
+这说明了一个基本的工程事实：更多的自由度就意味着更多的不确定性。在 29-DoF 系统中，上半身的运动直接影响下肢的平衡，使得每一步的结果都更难被精确预测。
+
+\section{存活步数与鲁棒性对比}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/paper_episode_length_convergence.png}
+    \caption{平均存活回合长度(Episode Length)收敛曲线}
+    \label{fig:episode_length}
+\end{figure}
+
+抵抗外部扰动并防止跌倒是强化学习在双足运动控制中的核心任务之一。由图 \ref{fig:episode_length} 的平均存活步数曲线可知，在策略网络掌握基础步态后，系统因跌倒而触发提前终止的情况迅速减少。具体来看，从 TensorBoard 数据的精确统计中发现，12-DoF 模型由于缺乏上半身的代偿手段，在约 8820 次迭代时达到了约 997 步的最高平均存活步数，并最终回落至 960 步左右；而 29-DoF 模型得益于全身自由度的协同，在约 3800 次迭代时便迅速达到了 1958 步的高峰存活水平，并最终维持在约 1632 步的高位。这表明包含上半身的 29-DoF 模型虽然在总奖励收敛曲线上相对挣扎，但系统在存活步数层面的鲁棒性却成倍增加。
+
+从曲线的波动范围看，12-DoF 模型的存活步数有较大的波动（随机性大），而29-DoF 模型的波动较小，更加稳定。这意味着29-DoF系统对干扰的容忍度更高。
+
+这背后的原因很简单：更多的自由度就有更多调节空间。当下肢遇到问题时，上半身可以摆动来协调，帮助维持平衡。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/paper_subrewards_grid.png}
+    \caption{各项子奖励(Sub-rewards)演化时序分析图}
+    \label{fig:sub_rewards}
+\end{figure}
+
+图 \ref{fig:sub_rewards} 展示了各个子奖励项在整个训练过程中的变化情况。为了能清晰地对比不同奖励的作用，我们将所有细分项绘制在了同一个时间轴上。从这些曲线的数值和走势可以看出，在最基础的移动速度跟踪上，两个模型经过上千轮迭代后都稳步提升。12自由度模型最高能达到约1.49分（最终收敛在1.43分左右），而29自由度模型最高能达到约1.45分（最终收敛在1.40分左右）。这说明，在学会“往前走”这个基本能力上，两个模型的表现是相近的。但在转向能力的跟踪上，差距就显现出来了：29自由度模型在角速度跟踪奖励上最高能达到0.36分，明显优于12自由度模型的0.18分（后者后期还有所回落）。这个差异很可能是因为，在转向时，29自由度模型可以通过手臂和腰部的关节主动调整身体姿态，来帮助对抗旋转，从而让整体转向更稳定、更有效率。
+
+另一方面，那些为了安全和节能而设置的惩罚项（比如力矩惩罚、动作变化率惩罚、关节位置限幅惩罚等），其数值最终都收敛并稳定在一个很小的负值区间（大约在-0.05到-0.21之间），而不是简单地变成零或者一个很大的负数。这是一个很好的信号，它表明策略网络并没有简单地“躺平”不去触碰惩罚，而是学会了如何精细地控制关节，让动作既满足运动要求，又能巧妙地让所有状态（比如关节角度、电机电流）始终维持在硬件所允许的安全边界之内。这体现了策略优秀的控制平滑性和对模型动力学的稳定解算能力。
+
+总的来说，从这些奖励曲线的变化能看出学习的过程：两个模型都是先掌握了向前走，再去优化动作的质量和效率。29自由度模型凭借上半身的协助，获得了更好的转向能力。而所有惩罚项都能收敛到很小的值，说明机器人最终学会了既稳定又省力的走路方式。
+
+\section{训练配置与参数选择}
+\label{sec:training_config}
+
+本研究的模型训练是基于 PyTorch 框架完成的。在硬件层面，计算任务主要由一块 NVIDIA RTX A100 GPU（配备40GB显存）和一颗8核的 Intel Xeon CPU 共同承担。仿真环境则依托 NVIDIA Isaac Gym 套件及其内置的 PhysX 物理引擎构建。为了极大地提升数据采样效率，我们并行运行了1024个仿真环境。物理仿真的步长被设定为0.01秒（即100Hz的控制频率），策略网络的决策频率与此保持同步，确保控制指令能及时下发。
+
+根据实际训练日志记录，完成一次总计10000次迭代（约对应2.45亿个仿真步）的完整训练，12自由度的基线模型大约需要3个小时，而包含上半身、需要进行全身动力学耦合计算的29自由度模型则耗时更长，大约需要5.8个小时。训练时间的增加主要源于更复杂的模型所带来的额外计算开销。
+
+在深度强化学习算法的核心超参数设置上，我们进行了如下选择。优化器的学习率固定为 $5 \times 10^{-4}$，并采用 Adam 优化器来更新网络参数。为了平衡近期奖励和远期回报的重要性，折扣因子 $\gamma$ 被设置为 0.99。在估计优势函数时，广义优势估计（GAE）的衰减系数 $\lambda$ 取值为 0.95，这个值是在估计的方差与偏差之间取得的一个常用折中。PPO算法中用于限制策略更新幅度的裁剪参数 $\epsilon$ 设为 0.2，这能有效防止单次更新对策略造成过大的、可能有害的改动。
+
+在训练数据的组织上，我们每次从并行环境中收集包含1024个状态转移的样本，然后将这批数据均匀分割成4个容量为256的小批次（mini-batch），每个小批次会进行3轮（epoch）的梯度下降更新。策略网络（Actor）和价值网络（Critic）都采用相同的骨架结构：一个具有两个隐藏层的多层感知机（MLP），每个隐藏层有256个神经元，并使用tanh函数作为激活函数进行非线性变换。两个网络共享前面的特征提取层，最终再通过独立的输出头分别给出动作分布参数和状态价值估计。
+
+这些超参数的选择并非随意，而是基于相关领域的经验和我们的实验调试。例如，$5 \times 10^{-4}$ 是一个在PPO算法中较为常见且保守的学习率，有助于稳定训练；$\gamma=0.99$ 在机器人控制任务中被广泛使用，它让算法足够重视未来（比如摔倒的风险）；批大小1024主要是为了匹配我们GPU的显存容量，同时保证较高的数据吞吐效率；而256个神经元的隐藏层，经测试足以编码本任务所需的策略复杂度，网络不至于过小而导致性能不足，也不会过大而难以训练或导致过拟合。
+\section{步态演示与跨仿真引擎验证}
+
+为直观验证不同模型所生成的步态质量，以及策略在不同仿真引擎域（Sim-to-Sim）之间的迁移鲁棒性，本文导出了不同控制方案在不同物理环境下的运行时序截图。图~\ref{fig:12dof_isaacgym}~展示了12-DoF基础模型在发源域Isaac Gym的表现，体现了依靠下肢驱动的连续步态跟踪基础跨步能力。图~\ref{fig:29dof_isaacgym}~则展示了29-DoF全协同模型在发源域的运动状态，其中下肢策略承接了由于上半身PD控制器引入的整机多部位惯量扰动补偿。为进一步验证策略跨平台的鲁棒性，利用MuJoCo引擎展开了测试：图~\ref{fig:12dof_mujoco}~为12-DoF模型加载导出策略后的表现，核验了由于低自由度而导致的抗扰界限；而图~\ref{fig:29dof_mujoco}~揭显了29-DoF全协同架构在底层刚体碰撞模型跳变时展现出的较强前瞻适应性与韧性。
+
+\begin{figure}[htbp]
+    \centering
+    % 12-DoF Isaac Gym
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_isaac_1.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_isaac_2.png}
+    \end{minipage}
+    
+    \vspace{0.2cm}
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_isaac_3.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_isaac_4.png}
+    \end{minipage}
+    \caption{12-DoF模型(Isaac Gym)步态表现}
+    \label{fig:12dof_isaacgym}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    % 29-DoF Isaac Gym
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_isaac_1.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_isaac_2.png}
+    \end{minipage}
+    
+    \vspace{0.2cm}
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_isaac_3.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_isaac_4.png}
+    \end{minipage}
+    \caption{29-DoF模型(Isaac Gym)步态表现}
+    \label{fig:29dof_isaacgym}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    % 12-DoF MuJoCo
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_mujoco_1.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_mujoco_2.png}
+    \end{minipage}
+    
+    \vspace{0.2cm}
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_mujoco_3.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/12dof_mujoco_4.png}
+    \end{minipage}
+    \caption{12-DoF模型(MuJoCo)跨平台表现}
+    \label{fig:12dof_mujoco}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    % 29-DoF MuJoCo
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_mujoco_1.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_mujoco_2.png}
+    \end{minipage}
+    
+    \vspace{0.2cm}
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_mujoco_3.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/chap04_steps/29dof_mujoco_4.png}
+    \end{minipage}
+    \caption{29-DoF模型(MuJoCo)跨平台表现}
+    \label{fig:29dof_mujoco}
+\end{figure}
+
+\section{训练过程的工程经验}
+
+除了最终的奖励曲线和视频结果之外，训练过程中最有价值的，其实是那些反复试出来的工程经验。双足控制和普通的关节轨迹拟合不太一样，它不是把某个关节角度跟到位就结束了，而是需要在每个控制周期里同时处理姿态、接触、速度和能量之间的关系。很多问题在刚开始训练时并不会立刻暴露出来，而是要等到模型已经跑了一段时间之后，才会通过某些很具体的症状显现出来。比如，机器人如果在原地小幅抖动但总奖励看上去还不算太差，通常说明速度跟踪权重偏高，而姿态稳定项和动作平滑项没有把它及时压住；如果机器人走得过于拘谨，步幅很小，甚至每一步都像在试探地面，那往往又说明惩罚项压得太重，策略不敢真正把步子迈开。
+
+我们在 Isaac Gym 中设置了1024个并行仿真环境进行训练，这种做法带来的一个显著好处是，它能将奖励函数设计或策略中存在的潜在问题快速地暴露和放大。在单个环境中，机器人可能偶尔出现一次航向偏离或短暂的姿态失衡，这个问题并不明显，但当一千多个环境同时运行时，只要奖励函数的引导存在一点点偏差，所有环境中的智能体往往都会表现出相似的问题趋势，这在整体的训练曲线上就会形成清晰、一致的信号。例如，在训练的某个阶段，如果动作平滑惩罚的权重设置得偏弱了，我们最先在日志中观察到的可能不是总奖励下降，而是所有环境中机器人关节速度的方差开始集体变大。接着，当我们去查看仿真视频时，就会看到机器人的腿部动作确实变得细碎，上半身的摆动也开始杂乱。相反，如果为了防止摔倒而将躯干倾斜角的惩罚设得过于严厉，策略可能会变得过分“保守”。机器人看起来很少摔倒，但代价是步态质量明显下降，它更像是在小心翼翼地避免犯错，而不是在积极地、高效地前进。这时候，我们就需要回过头去仔细分析训练记录，把每一项子奖励的曲线单独拿出来审视，而不是只关注那个汇总的总分。
+
+通过实验我们还观察到一个有趣的现象：奖励数值的收敛与我们在视频中看到的动作表现，在时间上往往并不同步。有时候，曲线显示各项奖励已经上升并趋于稳定了，但实际渲染出的步态看起来却仍然不够协调、自然。而另一些时候，视频里的机器人已经走得很稳了，奖励曲线却可能因为某个惩罚项的权重波动而仍有起伏。这种“滞后”提醒我们，评估策略的好坏需要综合多种信息：既要看数字曲线，也要反复观看仿真视频，并结合具体的训练迭代次数一起判断。这一点在分析29自由度模型时更为明显，因为上半身和多个维度的关节会将一些局部、细微的动作放大并传导到全身，从而使得姿态层面上的改善无法立刻在整体的奖励指标上反映出来。因此，持续地交叉验证数值指标与视觉表现至关重要。
+
+\section{总结与讨论}
+\label{sec:conclusion}
+
+从最终部署的角度看，评价一个策略是否真正可行，其核心指标往往不是某一次训练能达到的最高分数，而是当机器人遇到意外干扰或处于非理想状态时，它维持基础运动的能力。在早期的模型中，我们常看到机器人因为起步时一个微小的重心偏移，就引发一连串过度的、振荡式的补偿动作，最终导致整个步态崩溃。而在优化后的模型中，面对同样的偏移，机器人更倾向于做出几个小幅度的、收敛的修正动作，很快就能恢复稳定。这标志着策略正在形成一种更稳健、更“成熟”的控制习惯。对于未来在真实机器人硬件上的运行，这种控制习惯远比在某次测试中获得高分更有实际意义，因为大幅度、高频率的动作切换会严重增加电机峰值电流、加剧机械磨损，并对通信系统的实时性提出苛刻要求。
+
+因此，对双足机器人强化学习策略的评价，不能孤立地依赖任何一个单一指标。一个很高的总分，并不必然等同于优美、高效的动作质量；一段很长的存活时间，也可能仅仅意味着策略侥幸没有遇到极端的失败场景。真正可靠的评价，来自于多项指标之间能相互印证，形成一致的趋势。例如，总奖励在稳定攀升的同时，价值函数的预测误差在持续下降，动作的抖动被有效抑制，平均存活步数趋于收敛，并且在可视化仿真中能直观地看到上半身那些冗余的、帮助平衡的摆动明显减少。这种跨指标的一致性，才是策略正逐步形成一个稳定、鲁棒的控制模式的有力证据。这对于未来从仿真到实物的迁移（Sim-to-Real）尤为关键，能显著降低在真实机器人上产生难以预测的、危险动作的风险。
+
+回顾整个研究，优化工作大致遵循了这样一个渐进式的工程路径：首先是初步构建任务框架，打通从仿真环境到强化学习训练的完整闭环；接着进入架构统一与精细化调优阶段，重点提升动作的平稳性与能量效率；最后则致力于引入抗干扰机制，增强策略对物理扰动（如地面不平、外力推搡）的适应能力，从而提升其部署的鲁棒性。本文所涉及的理论分析与奖励函数设计，并非完全基于先验知识，而更多地是在工程迭代中，通过反复观察、测试、验证（例如尝试不同的奖惩组合对最终步态形态的具体影响）而逐步确立和完善的。这样一条从实践中来、到实践中去的演进路径，为我们所提出的双足机器人运动控制方法的有效性，提供了比较扎实的实证依据。
